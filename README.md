@@ -53,10 +53,13 @@ which is what `Consensus::current_epoch()` reads inside the template.
 cargo test
 ```
 
-23 tests cover the full lifecycle: creation terms and guards, public top-ups, check-in extension,
-late check-in revival, early/exact/late release, exact beneficiary payment with a third-party caller,
-double-release refusal, non-owner refusal for every owner-only method, badge-transfer ownership,
-partial withdrawal, beneficiary redirection, close semantics, and terminal-state refusals.
+35 tests cover the full lifecycle: creation terms and guards, public top ups, check in extension,
+late check in revival, release before, exactly at and after the deadline, exact beneficiary payment
+with a third party caller, double release refusal, non owner refusal for every owner only method,
+badge transfer ownership including the old holder losing every owner only action and the new holder
+gaining them, a check in exactly at the deadline epoch, beneficiary change after the window has
+lapsed, release triggered by the beneficiary and by the owner, partial withdrawal, beneficiary
+redirection, close semantics, and terminal state refusals.
 
 ## Try the simulation
 
@@ -89,6 +92,19 @@ moves real buckets through a vault. Amount semantics (exact payment, no rounding
 ```sh
 cargo build-wasm   # alias for: cargo build --target=wasm32-unknown-unknown
 ```
+
+## Deployment
+
+The template is published on the Esmeralda testnet.
+
+Template address: template_e7164ec19c5c7ea0e84c8d0cce06c874565cd44e97109088bf3eedfdd5a1664d
+
+Publish transaction: 217ce22b3f7ee37a4df0efb5c728d255dfe546dd30deb93e45b9163cdf766e4b
+
+The publish was confirmed in epoch 13234 on 19 November 2026 and can be checked on the public
+Esmeralda indexer. The published binary is the exact build of the code in this repository,
+147,558 bytes of WASM. Anyone can now create a StillHere vault on Esmeralda by calling the
+template constructor.
 
 ## Layout
 

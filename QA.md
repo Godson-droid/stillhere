@@ -121,3 +121,25 @@ description of the check-in mechanism. Post-rename verification from the
 repo root: `cargo test` — **23 passed, 0 failed**, identical to the
 pre-rename count, and `sim/index.html` re-checked as a single
 self-contained file with no external references.
+
+## Update, 19 November 2026
+
+The engine suite now has 35 tests and the full suite passes, 35 passed and
+0 failed, run again on 19 November 2026 against the final code. The twelve
+added tests cover the badge transfer cases (the old holder refused on
+withdraw, set beneficiary and close, and the new holder able to do each),
+the exact deadline boundary (a check in exactly at the deadline epoch
+succeeds and extends, a check in at the deadline blocks release at the old
+deadline, and release one epoch after the deadline pays the beneficiary),
+a beneficiary change after the window has lapsed redirecting the release,
+and release triggered by the beneficiary and by the owner, with payment
+going to the beneficiary in both cases.
+
+The template was published to the Esmeralda testnet on 19 November 2026.
+Template address template_e7164ec19c5c7ea0e84c8d0cce06c874565cd44e97109088bf3eedfdd5a1664d,
+publish transaction 217ce22b3f7ee37a4df0efb5c728d255dfe546dd30deb93e45b9163cdf766e4b,
+confirmed in epoch 13234 and verified on the public Esmeralda indexer. The
+published binary is 147,558 bytes and is the exact build of the code in
+this repository. The known limitation above about the template not being
+deployed to a live network no longer applies to Esmeralda. Mainnet remains
+undeployed and the First to Launch bonus remains unattempted.
