@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StillHere — Ootle Template Simulation</title>
+<style>
+  :root {
+    --bg: #07090a;
+    --surface: rgba(255, 255, 255, 0.03);
+    --surface-strong: rgba(255, 255, 255, 0.055);
+    --line: rgba(255, 255, 255, 0.09);
+    --line-soft: rgba(255, 255, 255, 0.055);
+    --text: #eef2f0;
+    --muted: #9aa7a1;
+    --faint: #5f6d66;
+    --mint: #3ddc97;
+    --mint-dim: rgba(61, 220, 151, 0.14);
+    --rose: #fb7185;
+    --rose-dim: rgba(251, 113, 133, 0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.12);
+    --radius: 14px;
+    --font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(900px 480px at 85% -10%, rgba(61, 220, 151, 0.07), transparent 60%),
+      radial-gradient(700px 420px at -10% 110%, rgba(61, 220, 151, 0.045), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    padding: 28px 20px 56px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header.top {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; padding-bottom: 18px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .pulse-mark {
+    width: 42px; height: 42px; border-radius: 12px; flex: none;
+    background: var(--mint-dim); border: 1px solid rgba(61, 220, 151, 0.35);
+    display: grid; place-items: center;
+  }
+  h1 { font-size: 22px; letter-spacing: 0.14em; font-weight: 800; }
+  h1 .thin { color: var(--mint); }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .sim-flag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+    color: var(--amber); background: var(--amber-dim);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    padding: 7px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .epoch-bar {
+    margin-top: 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px 16px;
+    backdrop-filter: blur(8px);
+  }
+  .epoch-now { font-family: var(--mono); }
+  .epoch-now .label { color: var(--faint); font-size: 11px; letter-spacing: 0.1em; display: block; }
+  .epoch-now .value { font-size: 26px; font-weight: 700; }
+  .epoch-bar .spacer { flex: 1; }
+  .epoch-note { color: var(--muted); font-size: 12.5px; max-width: 430px; line-height: 1.45; }
+  button {
+    font-family: var(--font); font-size: 13.5px; font-weight: 600;
+    color: var(--text); background: var(--surface-strong);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 15px; cursor: pointer;
+    transition: border-color .15s, background .15s, transform .05s;
+  }
+  button:hover { border-color: rgba(61, 220, 151, 0.5); }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--mint); border-color: var(--mint); color: #06231a; }
+  button.primary:hover { background: #55e6ab; }
+  button.danger { border-color: rgba(251, 113, 133, 0.45); color: var(--rose); background: var(--rose-dim); }
+  button.small { padding: 6px 11px; font-size: 12.5px; }
+  button:disabled { opacity: 0.38; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--line); }
+  .grid { display: grid; grid-template-columns: 400px 1fr; gap: 18px; margin-top: 18px; align-items: start; }
+  @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px;
+    backdrop-filter: blur(8px);
+  }
+  .card + .card { margin-top: 18px; }
+  .card h2 {
+    font-size: 12px; letter-spacing: 0.12em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 14px; font-weight: 700;
+  }
+  label.field { display: block; margin-bottom: 12px; }
+  label.field span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.04em; }
+  input, select {
+    width: 100%; background: rgba(0,0,0,0.35); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; font-family: var(--font);
+  }
+  input:focus, select:focus { outline: none; border-color: rgba(61, 220, 151, 0.6); }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .hint { font-size: 12px; color: var(--faint); line-height: 1.5; margin-top: 10px; }
+</style>
+</head>
+<style>
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 720px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: rgba(0,0,0,0.28); border: 1px solid var(--line-soft);
+    border-radius: 12px; padding: 13px 14px;
+  }
+  .kpi .k-label { font-size: 10.5px; letter-spacing: 0.1em; color: var(--faint); text-transform: uppercase; }
+  .kpi .k-value { font-family: var(--mono); font-size: 21px; font-weight: 700; margin-top: 5px; }
+  .kpi .k-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
+  .kpi.glow { border-color: rgba(61, 220, 151, 0.45); box-shadow: 0 0 24px rgba(61, 220, 151, 0.10) inset, 0 0 18px rgba(61, 220, 151, 0.07); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+    color: var(--muted); white-space: nowrap;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .pill.active { color: var(--mint); border-color: rgba(61, 220, 151, 0.4); background: var(--mint-dim); }
+  .pill.active .dot { background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+  .pill.lapsed { color: var(--amber); border-color: rgba(251, 191, 36, 0.4); background: var(--amber-dim); }
+  .pill.lapsed .dot { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .pill.dead { color: var(--rose); border-color: rgba(251, 113, 133, 0.4); background: var(--rose-dim); }
+  .pill.dead .dot { background: var(--rose); }
+  .meter { height: 8px; border-radius: 99px; background: rgba(255,255,255,0.06); overflow: hidden; margin-top: 14px; }
+  .meter > div { height: 100%; background: linear-gradient(90deg, #1f9d6c, var(--mint)); border-radius: 99px; transition: width .4s ease; }
+  .meter > div.over { background: linear-gradient(90deg, #b45309, var(--amber)); }
+  .meter-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 6px; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .actions .wide { grid-column: 1 / -1; }
+  .actor-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .actor-row button { flex: 1; }
+  .actor-row button.selected { border-color: var(--mint); color: var(--mint); background: var(--mint-dim); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); padding: 8px 10px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: #0b0e0d;
+  }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); font-family: var(--mono); font-size: 12.5px; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.ev { color: var(--mint); white-space: nowrap; }
+  td.ref { color: var(--rose); }
+  .table-scroll { max-height: 300px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 12px; }
+  .accounts td.name { font-family: var(--font); font-weight: 600; }
+  .accounts td .tag { font-family: var(--mono); font-size: 10.5px; color: var(--faint); display: block; font-weight: 400; }
+  .toast {
+    border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5;
+    margin-top: 14px; display: none; border: 1px solid var(--line);
+  }
+  .toast.show { display: block; }
+  .toast.ok { background: var(--mint-dim); border-color: rgba(61, 220, 151, 0.4); color: #c9f5e2; }
+  .toast.err { background: var(--rose-dim); border-color: rgba(251, 113, 133, 0.4); color: #ffd9de; font-family: var(--mono); font-size: 12.5px; }
+  footer { margin-top: 26px; color: var(--faint); font-size: 12.5px; line-height: 1.65; border-top: 1px solid var(--line-soft); padding-top: 16px; }
+  footer code { font-family: var(--mono); color: var(--muted); }
+  .empty-note { color: var(--faint); font-size: 13px; padding: 16px 4px; font-family: var(--mono); }
+</style>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="pulse-mark" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M2 12h4l2.5-6 4 12 2.5-6H22" stroke="#3ddc97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>STILL<span class="thin">HERE</span></h1>
+        <div class="sub">A dead-man's-switch vault on Tari Ootle. The chain watches the heartbeat, so no one else has to.</div>
+      </div>
+    </div>
+    <div class="sim-flag">SIMULATION · NO WALLET · NO REAL FUNDS</div>
+  </header>
+
+  <div class="epoch-bar">
+    <div class="epoch-now">
+      <span class="label">CURRENT EPOCH</span>
+      <span class="value" id="epochNow">0</span>
+    </div>
+    <button id="btnEpoch1">Advance 1 epoch</button>
+    <button id="btnEpoch5">Advance 5 epochs</button>
+    <button id="btnEpochDeadline">Advance to deadline</button>
+    <div class="spacer"></div>
+    <div class="epoch-note">On chain, epochs advance on their own (roughly 20 minutes each) and the template reads
+      <b>Consensus::current_epoch()</b>. Here you advance time by hand to walk the vault through its life.</div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <section class="card" id="createCard">
+        <h2>1 · Create the vault</h2>
+        <label class="field"><span>Initial deposit (TARI)</span>
+          <input type="number" id="inDeposit" value="500" min="0" step="any">
+        </label>
+        <label class="field"><span>Beneficiary</span>
+          <select id="inBeneficiary">
+            <option value="beneficiary">Beneficiary account</option>
+            <option value="stranger">Stranger account</option>
+            <option value="owner">Owner account</option>
+          </select>
+        </label>
+        <label class="field"><span>Check-in interval (epochs)</span>
+          <input type="number" id="inInterval" value="10" min="0" step="1">
+        </label>
+        <button class="primary" id="btnCreate" style="width:100%">Create vault</button>
+        <div class="hint">Creation mints exactly one <b>owner badge</b> to the owner. The badge is the only key:
+          whoever holds it can check in, withdraw, change the beneficiary, or close. Minting is locked forever.</div>
+        <div class="toast" id="createToast"></div>
+      </section>
+
+      <section class="card">
+        <h2>2 · Act as</h2>
+        <div class="actor-row" id="actorRow">
+          <button data-actor="owner" class="selected">Owner (badge)</button>
+          <button data-actor="beneficiary">Beneficiary</button>
+          <button data-actor="stranger">Stranger</button>
+        </div>
+        <div class="actions">
+          <button id="btnCheckIn">Check in</button>
+          <button id="btnClose">Close vault</button>
+          <button id="btnRelease" class="danger wide">Release to beneficiary (anyone, after lapse)</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <input type="number" id="inMoveAmount" value="100" min="0" step="any" aria-label="Amount">
+        </div>
+        <div class="actions" style="margin-top:10px">
+          <button id="btnDeposit">Deposit amount</button>
+          <button id="btnWithdraw">Withdraw amount</button>
+        </div>
+        <label class="field" style="margin-top:12px"><span>Set beneficiary to</span>
+          <select id="inNewBeneficiary">
+            <option value="beneficiary">Beneficiary account</option>
+            <option value="stranger">Stranger account</option>
+            <option value="owner">Owner account</option>
+          </select>
+        </label>
+        <button id="btnSetBeneficiary" style="width:100%">Set beneficiary</button>
+        <div class="toast" id="actionToast"></div>
+        <div class="hint">Try it: act as the Stranger and press <b>Check in</b>. The template's access rules refuse,
+          exactly as they do on chain. Then let the deadline pass and release as the Stranger: that one is allowed,
+          and the money still lands with the beneficiary, never the caller.</div>
+      </section>
+
+      <section class="card">
+        <h2>Guided run</h2>
+        <button id="btnDemo" style="width:100%">Play the full lifecycle</button>
+        <div class="hint">Create, top up, check in, miss the deadline, release. About 15 seconds, narrated in the event log.</div>
+        <button id="btnReset" class="small" style="width:100%; margin-top:10px">Reset simulation</button>
+      </section>
+    </div>
+
+    <div>
+      <section class="card">
+        <h2>Vault status · mirrors status() on chain</h2>
+        <div class="kpis">
+          <div class="kpi glow">
+            <div class="k-label">Balance</div>
+            <div class="k-value" id="kBalance">—</div>
+            <div class="k-sub">TARI in the vault</div>
+          </div>
+          <div class="kpi">
+            <div class="k-label">State</div>
+            <div class="k-value" id="kState">—</div>
+            <div class="k-sub" id="kStateSub">no vault yet</div>
+          </div>
+          <div class="kpi">
+            <div class="k-label">Deadline epoch</div>
+            <div class="k-value" id="kDeadline">—</div>
+            <div class="k-sub" id="kDeadlineSub">last check-in —</div>
+          </div>
+          <div class="kpi">
+            <div class="k-label">Epochs of air left</div>
+            <div class="k-value" id="kAir">—</div>
+            <div class="k-sub">window <span id="kWindow">—</span> epochs</div>
+          </div>
+        </div>
+        <div style="margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+          <span class="pill" id="statePill"><span class="dot"></span><span id="statePillText">NO VAULT</span></span>
+          <span class="pill">BENEFICIARY&nbsp;<b id="pillBeneficiary" style="color:var(--text)">—</b></span>
+          <span class="pill">OWNER BADGE&nbsp;<b style="color:var(--text)">SHOWN #0 · supply 1 · minting locked</b></span>
+        </div>
+        <div class="meter"><div id="meterFill" style="width:0%"></div></div>
+        <div class="meter-labels"><span id="meterLeft">last check-in</span><span id="meterRight">deadline</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Accounts</h2>
+        <table class="accounts">
+          <thead><tr><th>Account</th><th>Role</th><th style="text-align:right">Balance (TARI)</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Owner<span class="tag">holds the owner badge</span></td><td>Creator</td><td style="text-align:right" id="balOwner">1,000</td></tr>
+            <tr><td class="name">Beneficiary<span class="tag">receives the vault on release</span></td><td>Named at creation</td><td style="text-align:right" id="balBeneficiary">0</td></tr>
+            <tr><td class="name">Stranger<span class="tag">no badge, no relationship</span></td><td>Anyone</td><td style="text-align:right" id="balStranger">1,000</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Event log · the events the template emits</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Epoch</th><th>Event</th><th>Detail</th></tr></thead>
+            <tbody id="logBody">
+              <tr><td colspan="3" class="empty-note">No events yet. Create a vault to begin.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    This page is a <b>simulation</b> of the StillHere template logic. It runs entirely in your browser:
+    no wallet, no chain, no real funds. Every rule enforced here, including every refusal message, mirrors
+    <code>src/lib.rs</code> of the template, and the same behaviours are proven against the real Ootle engine
+    by the test suite in <code>tests/test.rs</code> (run <code>cargo test</code>).
+    On chain, release deposits the full balance directly into the beneficiary's account component, so the
+    person who triggers it can never divert the funds. Simulation written for the Tari November Build Contest.
+  </footer>
+</div>
+<script>
+"use strict";
+/* ------------------------------------------------------------------
+   StillHere simulation.
+   Every rule below mirrors src/lib.rs of the Ootle template, including
+   the refusal strings. Names in comments cite the template method.
+------------------------------------------------------------------- */
+const NAMES = { owner: "Owner", beneficiary: "Beneficiary", stranger: "Stranger" };
+const START_BALANCE = { owner: 1000, beneficiary: 0, stranger: 1000 };
+
+let epoch, accounts, vault, actor, log;
+
+function reset() {
+  epoch = 0;
+  accounts = { ...START_BALANCE };
+  vault = null;               // { balance, beneficiary, interval, lastCheckIn, deadline, state }
+  actor = "owner";
+  log = [];
+  render();
+  toast("createToast", "", "ok", false);
+  toast("actionToast", "", "ok", false);
+}
+
+function fmt(n) {
+  return Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+}
+
+/* Refusals are thrown as Errors with the template's exact messages. */
+function refuse(msg) { throw new Error(msg); }
+
+function assertActive() {
+  if (vault.state === "Released") refuse("Vault has already been released");
+  if (vault.state === "Closed") refuse("Vault is closed");
+}
+
+/* Access rules: check_in, withdraw, set_beneficiary and close require a
+   proof of the owner badge. Only the Owner actor holds the badge. */
+function requireBadge(method) {
+  if (actor !== "owner") {
+    refuse("Access rule refused the call to '" + method + "': a proof of the owner badge (resource SHOWN) is required and the " + NAMES[actor] + " does not hold it");
+  }
+}
+
+/* ---- template: new(...) ---- */
+function createVault(deposit, beneficiary, interval) {
+  if (vault) refuse("This simulation hosts one vault at a time. Reset to start over.");
+  if (!(interval > 0)) refuse("Check-in interval must be at least 1 epoch");
+  if (!(deposit > 0)) refuse("Initial deposit must be greater than zero");
+  if (accounts.owner < deposit) refuse("The owner account does not hold enough TARI for this deposit");
+  accounts.owner -= deposit;
+  vault = {
+    balance: deposit,
+    beneficiary: beneficiary,
+    interval: interval,
+    lastCheckIn: epoch,
+    deadline: epoch + interval,
+    state: "Active",
+  };
+  pushLog("still_here.created",
+    "beneficiary " + NAMES[beneficiary] + " · interval " + interval + " epochs · deadline epoch " + vault.deadline + " · initial " + fmt(deposit) + " TARI");
+}
+
+/* ---- template: deposit(bucket) — public, does not reset the heartbeat ---- */
+function deposit(amount) {
+  if (!vault) refuse("No vault exists yet");
+  assertActive();
+  if (!(amount > 0)) refuse("Deposit amount must be greater than zero");
+  if (accounts[actor] < amount) refuse("The " + NAMES[actor] + " account does not hold enough TARI");
+  accounts[actor] -= amount;
+  vault.balance += amount;
+  pushLog("still_here.deposit", fmt(amount) + " TARI from the " + NAMES[actor] + " · balance " + fmt(vault.balance) + " TARI");
+}
+
+/* ---- template: check_in() — owner badge only ---- */
+function checkIn() {
+  if (!vault) refuse("No vault exists yet");
+  requireBadge("check_in");
+  assertActive();
+  vault.lastCheckIn = epoch;
+  vault.deadline = epoch + vault.interval;
+  pushLog("still_here.check_in", "epoch " + epoch + " · new deadline epoch " + vault.deadline);
+}
+
+/* ---- template: withdraw(amount) — owner badge only ---- */
+function withdraw(amount) {
+  if (!vault) refuse("No vault exists yet");
+  requireBadge("withdraw");
+  assertActive();
+  if (!(amount > 0)) refuse("Withdrawal amount must be greater than zero");
+  if (amount > vault.balance) refuse("Withdrawal amount exceeds the vault balance");
+  vault.balance -= amount;
+  accounts.owner += amount;
+  pushLog("still_here.withdraw", fmt(amount) + " TARI to the owner · balance " + fmt(vault.balance) + " TARI");
+}
+
+/* ---- template: set_beneficiary(addr) — owner badge only ---- */
+function setBeneficiary(next) {
+  if (!vault) refuse("No vault exists yet");
+  requireBadge("set_beneficiary");
+  assertActive();
+  const prev = vault.beneficiary;
+  vault.beneficiary = next;
+  pushLog("still_here.beneficiary_changed", NAMES[prev] + " → " + NAMES[next]);
+}
+
+/* ---- template: close() — owner badge only, terminal ---- */
+function close() {
+  if (!vault) refuse("No vault exists yet");
+  requireBadge("close");
+  assertActive();
+  vault.state = "Closed";
+  const amount = vault.balance;
+  vault.balance = 0;
+  accounts.owner += amount;
+  pushLog("still_here.closed", fmt(amount) + " TARI returned to the owner at epoch " + epoch);
+}
+
+/* ---- template: release() — anyone, only after the lapse.
+   The vault itself deposits into the beneficiary's account, so the
+   caller can never divert the funds. ---- */
+function release() {
+  if (!vault) refuse("No vault exists yet");
+  if (vault.state === "Released") refuse("Vault has already been released");
+  if (vault.state === "Closed") refuse("Vault is closed and cannot be released");
+  if (epoch < vault.deadline) {
+    refuse("Vault has not lapsed: the owner last checked in at epoch " + vault.lastCheckIn +
+      " and release is possible from epoch " + vault.deadline + " (current epoch " + epoch + ")");
+  }
+  vault.state = "Released";
+  const amount = vault.balance;
+  vault.balance = 0;
+  accounts[vault.beneficiary] += amount;
+  pushLog("still_here.released",
+    fmt(amount) + " TARI deposited into the " + NAMES[vault.beneficiary] + "'s account · triggered by the " + NAMES[actor]);
+}
+
+function isLapsed() {
+  return !!vault && vault.state === "Active" && epoch >= vault.deadline;
+}
+
+function pushLog(event, detail, isRefusal) {
+  log.unshift({ epoch, event, detail, isRefusal: !!isRefusal });
+}
+</script>
+<script>
+"use strict";
+/* ---------------- rendering + wiring ---------------- */
+const $ = (id) => document.getElementById(id);
+
+function toast(id, msg, kind, show) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = "toast" + (show ? " show " + kind : "");
+}
+
+function attempt(toastId, fn, okMsg) {
+  try {
+    fn();
+    if (okMsg) toast(toastId, okMsg, "ok", true); else toast(toastId, "", "ok", false);
+  } catch (e) {
+    pushLog("refused", e.message, true);
+    toast(toastId, e.message, "err", true);
+  }
+  render();
+}
+
+function render() {
+  $("epochNow").textContent = epoch;
+  $("balOwner").textContent = fmt(accounts.owner);
+  $("balBeneficiary").textContent = fmt(accounts.beneficiary);
+  $("balStranger").textContent = fmt(accounts.stranger);
+
+  const pill = $("statePill"), pillText = $("statePillText");
+  if (!vault) {
+    $("kBalance").textContent = "—";
+    $("kState").textContent = "—";
+    $("kStateSub").textContent = "no vault yet";
+    $("kDeadline").textContent = "—";
+    $("kDeadlineSub").textContent = "last check-in —";
+    $("kAir").textContent = "—";
+    $("kWindow").textContent = "—";
+    $("pillBeneficiary").textContent = "—";
+    pill.className = "pill"; pillText.textContent = "NO VAULT";
+    $("meterFill").style.width = "0%";
+    $("meterFill").className = "";
+    $("meterLeft").textContent = "last check-in";
+    $("meterRight").textContent = "deadline";
+  } else {
+    const lapsed = isLapsed();
+    $("kBalance").textContent = fmt(vault.balance);
+    $("kState").textContent = vault.state;
+    $("kStateSub").textContent =
+      vault.state === "Active" ? (lapsed ? "heartbeat lapsed, release is open" : "heartbeat alive") :
+      vault.state === "Released" ? "paid to the beneficiary" : "closed by the owner";
+    $("kDeadline").textContent = vault.deadline;
+    $("kDeadlineSub").textContent = "last check-in " + vault.lastCheckIn;
+    $("kAir").textContent = vault.state === "Active" ? Math.max(0, vault.deadline - epoch) : "0";
+    $("kWindow").textContent = vault.interval;
+    $("pillBeneficiary").textContent = NAMES[vault.beneficiary].toUpperCase();
+    if (vault.state === "Active" && !lapsed) { pill.className = "pill active"; pillText.textContent = "ACTIVE · HEARTBEAT ALIVE"; }
+    else if (vault.state === "Active" && lapsed) { pill.className = "pill lapsed"; pillText.textContent = "LAPSED · RELEASE OPEN"; }
+    else { pill.className = "pill dead"; pillText.textContent = vault.state.toUpperCase(); }
+    const span = Math.max(1, vault.deadline - vault.lastCheckIn);
+    const used = Math.min(span, Math.max(0, epoch - vault.lastCheckIn));
+    const fill = $("meterFill");
+    fill.style.width = (used / span * 100) + "%";
+    fill.className = lapsed ? "over" : "";
+    $("meterLeft").textContent = "checked in at epoch " + vault.lastCheckIn;
+    $("meterRight").textContent = "deadline epoch " + vault.deadline;
+  }
+
+  const body = $("logBody");
+  if (log.length === 0) {
+    body.innerHTML = '<tr><td colspan="3" class="empty-note">No events yet. Create a vault to begin.</td></tr>';
+  } else {
+    body.innerHTML = log.map((row) =>
+      "<tr><td>" + row.epoch + '</td><td class="ev' + (row.isRefusal ? " ref" : "") + '">' +
+      row.event + "</td><td>" + row.detail + "</td></tr>"
+    ).join("");
+  }
+
+  document.querySelectorAll("#actorRow button").forEach((b) => {
+    b.classList.toggle("selected", b.dataset.actor === actor);
+  });
+  $("btnEpochDeadline").disabled = !vault || vault.state !== "Active";
+}
+
+function readAmount(id) {
+  const v = parseFloat($(id).value);
+  return Number.isFinite(v) ? v : 0;
+}
+
+$("btnCreate").addEventListener("click", () => {
+  attempt("createToast", () => {
+    createVault(readAmount("inDeposit"), $("inBeneficiary").value, Math.floor(readAmount("inInterval")));
+  }, "Vault created. The owner badge (SHOWN #0) is in the owner's account and the first deadline is set.");
+});
+$("btnCheckIn").addEventListener("click", () =>
+  attempt("actionToast", checkIn, "Checked in. The deadline moved forward by the full window."));
+$("btnClose").addEventListener("click", () =>
+  attempt("actionToast", close, "Vault closed. The full balance went back to the owner."));
+$("btnRelease").addEventListener("click", () =>
+  attempt("actionToast", release, "Released. The vault paid the beneficiary directly; the caller received nothing."));
+$("btnDeposit").addEventListener("click", () =>
+  attempt("actionToast", () => deposit(readAmount("inMoveAmount")), "Deposited. Note the deadline did not move: only a check-in resets the heartbeat."));
+$("btnWithdraw").addEventListener("click", () =>
+  attempt("actionToast", () => withdraw(readAmount("inMoveAmount")), "Withdrawn to the owner. The deadline did not move."));
+$("btnSetBeneficiary").addEventListener("click", () =>
+  attempt("actionToast", () => setBeneficiary($("inNewBeneficiary").value), "Beneficiary updated."));
+$("btnEpoch1").addEventListener("click", () => { epoch += 1; render(); });
+$("btnEpoch5").addEventListener("click", () => { epoch += 5; render(); });
+$("btnEpochDeadline").addEventListener("click", () => {
+  if (vault && vault.state === "Active" && epoch < vault.deadline) epoch = vault.deadline;
+  render();
+});
+$("actorRow").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-actor]");
+  if (b) { actor = b.dataset.actor; render(); }
+});
+$("btnReset").addEventListener("click", reset);
+
+/* ---------------- guided lifecycle ---------------- */
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+async function playDemo() {
+  reset();
+  const step = async (fn, wait) => { fn(); render(); await sleep(wait); };
+  const note = (text) => { pushLog("guide", text); render(); };
+
+  $("inDeposit").value = 500; $("inInterval").value = 10; $("inBeneficiary").value = "beneficiary";
+  await step(() => { createVault(500, "beneficiary", 10); note("The owner creates a vault: 500 TARI, beneficiary named, 10 epoch window."); }, 1600);
+  await step(() => { deposit(150); note("A top-up lands. The deadline stays at epoch 10: deposits are not a heartbeat."); }, 1600);
+  await step(() => { epoch = 6; note("Time passes. Epoch 6 of 10."); }, 1400);
+  await step(() => { checkIn(); note("The owner checks in. The deadline slides to epoch 16."); }, 1600);
+  actor = "stranger"; render();
+  await step(() => {
+    try { checkIn(); } catch (e) { pushLog("refused", e.message, true); }
+    note("A stranger tries to check in and is refused: no owner badge, no heartbeat.");
+  }, 1800);
+  await step(() => { epoch = 16; note("The owner goes quiet. Epoch 16: the heartbeat has lapsed."); }, 1500);
+  await step(() => {
+    release();
+    note("The stranger triggers the release. The vault pays the beneficiary directly: 650 TARI, and the stranger gets nothing.");
+  }, 800);
+  toast("actionToast", "Lifecycle complete: created, topped up, checked in, lapsed, released. The beneficiary holds 650 TARI.", "ok", true);
+}
+$("btnDemo").addEventListener("click", playDemo);
+
+reset();
+</script>
+</body>
+</html>
