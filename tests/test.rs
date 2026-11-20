@@ -88,6 +88,10 @@ fn vault_deadline(test: &mut TemplateTest, vault: ComponentAddress) -> u64 {
     test.call_method(vault, "deadline_epoch", args![], vec![])
 }
 
+fn vault_is_lapsed(test: &mut TemplateTest, vault: ComponentAddress) -> bool {
+    test.call_method(vault, "is_lapsed", args![], vec![])
+}
+
 /// Builds the proof dance that owner-only methods require: create a proof of
 /// the owner badge from the owner's account and authorize it for the call.
 fn owner_check_in(test: &mut TemplateTest, setup: &Setup) {
@@ -97,6 +101,55 @@ fn owner_check_in(test: &mut TemplateTest, setup: &Setup) {
             .put_last_instruction_output_on_workspace("proof")
             .authorize_proof("proof")
             .call_method(setup.vault, "check_in", args![])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+}
+
+/// Withdraws `amount` from the vault back into the owner's account, using
+/// the same proof dance as `owner_check_in`.
+fn owner_withdraw(test: &mut TemplateTest, setup: &Setup, amount: u64) {
+    test.execute_expect_success(
+        test.transaction()
+            .create_proof(setup.owner, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "withdraw", args![amount])
+            .put_last_instruction_output_on_workspace("taken")
+            .call_method(setup.owner, "deposit", args![Workspace("taken")])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+}
+
+/// Changes the vault beneficiary, using the same proof dance as
+/// `owner_check_in`.
+fn owner_set_beneficiary(test: &mut TemplateTest, setup: &Setup, new_beneficiary: ComponentAddress) {
+    test.execute_expect_success(
+        test.transaction()
+            .create_proof(setup.owner, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "set_beneficiary", args![new_beneficiary])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+}
+
+/// Closes the vault, returning the full balance to the owner's account,
+/// using the same proof dance as `owner_check_in`.
+fn owner_close(test: &mut TemplateTest, setup: &Setup) {
+    test.execute_expect_success(
+        test.transaction()
+            .create_proof(setup.owner, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "close", args![])
+            .put_last_instruction_output_on_workspace("returned")
+            .call_method(setup.owner, "deposit", args![Workspace("returned")])
             .drop_all_proofs_in_workspace()
             .build_and_seal(&setup.owner_key),
         vec![setup.owner_proof.clone()],
@@ -1087,4 +1140,693 @@ fn release_triggered_by_the_owner_pays_the_beneficiary_not_the_owner() {
     assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::from(DEPOSIT));
     assert_eq!(xtr_balance(&mut test, setup.owner), owner_before);
     assert_eq!(vault_state(&mut test, setup.vault), "Released");
+}
+
+// ---------------------------------------------------------------------------
+// One epoch windows and non fungible creation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn create_with_interval_of_one_epoch_lapses_at_the_next_epoch() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, 1);
+
+    // The shortest legal window: created at epoch 0, the deadline is epoch 1.
+    assert_eq!(vault_deadline(&mut test, setup.vault), 1);
+    assert!(!vault_is_lapsed(&mut test, setup.vault));
+
+    // One epoch later the vault has lapsed and can be released.
+    set_epoch(&mut test, 1);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::from(DEPOSIT));
+    assert_eq!(vault_state(&mut test, setup.vault), "Released");
+}
+
+#[test]
+fn create_with_a_non_fungible_deposit_is_rejected() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let (beneficiary, _, _) = test.create_empty_account();
+    let template = test.get_template_address(TEMPLATE_NAME);
+
+    // The owner badge of the first vault is a non fungible token. Opening a
+    // second vault around a bucket of it must be refused: a vault can only
+    // ever hold an amount based resource, never a non fungible one.
+    test.execute_expect_failure(
+        test.transaction()
+            .call_method(
+                setup.owner,
+                "withdraw_non_fungible",
+                args![setup.badge_resource, tari_template_lib::types::NonFungibleId::from_u64(0)],
+            )
+            .put_last_instruction_output_on_workspace("nft")
+            .call_function(template, "new", args![Workspace("nft"), beneficiary, INTERVAL])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Deposit resource rules and the heartbeat
+// ---------------------------------------------------------------------------
+
+#[test]
+fn deposit_of_a_different_resource_is_rejected() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let other = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // The second vault's owner badge is a bucket of a completely different
+    // resource from this vault's TARI. Depositing it here must be refused:
+    // a vault only ever holds the resource it was created with.
+    test.execute_expect_failure(
+        test.transaction()
+            .call_method(
+                other.owner,
+                "withdraw_non_fungible",
+                args![other.badge_resource, tari_template_lib::types::NonFungibleId::from_u64(0)],
+            )
+            .put_last_instruction_output_on_workspace("foreign")
+            .call_method(setup.vault, "deposit", args![Workspace("foreign")])
+            .build_and_seal(&other.owner_key),
+        vec![other.owner_proof.clone()],
+    );
+
+    assert_eq!(vault_balance(&mut test, setup.vault), Amount::from(DEPOSIT));
+    assert_eq!(vault_deadline(&mut test, setup.vault), INTERVAL);
+    // The second vault is untouched.
+    assert_eq!(vault_balance(&mut test, other.vault), Amount::from(DEPOSIT));
+}
+
+#[test]
+fn deposit_does_not_extend_the_deadline() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // Most of the window passes, then a top up lands.
+    set_epoch(&mut test, 6);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.owner, "withdraw", args![TARI_TOKEN, 50_000u64])
+            .put_last_instruction_output_on_workspace("topup")
+            .call_method(setup.vault, "deposit", args![Workspace("topup")])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+
+    // The balance grew, but the heartbeat did not move: the deadline is
+    // still the original epoch 10 and the last check in is still epoch 0.
+    assert_eq!(
+        vault_balance(&mut test, setup.vault),
+        Amount::from(DEPOSIT + 50_000)
+    );
+    assert_eq!(vault_deadline(&mut test, setup.vault), INTERVAL);
+    let last_check_in: u64 = test.call_method(setup.vault, "last_check_in_epoch", args![], vec![]);
+    assert_eq!(last_check_in, 0);
+
+    // So at the original deadline the vault releases and pays the topped
+    // up balance, exactly as if the deposit had bought no time at all.
+    set_epoch(&mut test, INTERVAL);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    assert_eq!(
+        xtr_balance(&mut test, setup.beneficiary),
+        Amount::from(DEPOSIT + 50_000)
+    );
+}
+
+#[test]
+fn deposit_after_lapse_increases_what_the_beneficiary_receives() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // The window lapses with no check in and no release yet.
+    set_epoch(&mut test, INTERVAL + 4);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    // A stranger tops up the lapsed vault. Depositing only requires the
+    // vault to still be Active, and it does not revive the heartbeat.
+    let (stranger, stranger_proof, stranger_key) = test.create_funded_account();
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(stranger, "withdraw", args![TARI_TOKEN, 200_000u64])
+            .put_last_instruction_output_on_workspace("topup")
+            .call_method(setup.vault, "deposit", args![Workspace("topup")])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof.clone()],
+    );
+    assert_eq!(
+        vault_balance(&mut test, setup.vault),
+        Amount::from(DEPOSIT + 200_000)
+    );
+    assert_eq!(vault_deadline(&mut test, setup.vault), INTERVAL);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    // The release pays the topped up balance in full.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof],
+    );
+    assert_eq!(
+        xtr_balance(&mut test, setup.beneficiary),
+        Amount::from(DEPOSIT + 200_000)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeat endurance
+// ---------------------------------------------------------------------------
+
+#[test]
+fn repeated_check_ins_keep_extending_the_deadline() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // The owner checks in three times, each time inside the running window,
+    // and every check in moves the deadline out by a full interval.
+    for epoch in [3u64, 9, 15] {
+        set_epoch(&mut test, epoch);
+        owner_check_in(&mut test, &setup);
+        let last_check_in: u64 =
+            test.call_method(setup.vault, "last_check_in_epoch", args![], vec![]);
+        assert_eq!(last_check_in, epoch);
+        assert_eq!(vault_deadline(&mut test, setup.vault), epoch + INTERVAL);
+    }
+
+    // One epoch before the third deadline the vault still cannot release.
+    let (_stranger, stranger_proof, stranger_key) = test.create_funded_account();
+    set_epoch(&mut test, 15 + INTERVAL - 1);
+    test.execute_expect_failure(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof.clone()],
+    );
+    assert_eq!(vault_state(&mut test, setup.vault), "Active");
+
+    // At the third deadline it releases and pays in full.
+    set_epoch(&mut test, 15 + INTERVAL);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof],
+    );
+    assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::from(DEPOSIT));
+}
+
+#[test]
+fn owner_silent_for_five_intervals_revives_with_a_single_check_in() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // Five whole windows pass with no check in and no release.
+    set_epoch(&mut test, INTERVAL * 5);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    // One check in revives the vault completely, however long the silence.
+    owner_check_in(&mut test, &setup);
+    let last_check_in: u64 = test.call_method(setup.vault, "last_check_in_epoch", args![], vec![]);
+    assert_eq!(last_check_in, INTERVAL * 5);
+    assert_eq!(vault_deadline(&mut test, setup.vault), INTERVAL * 6);
+    assert!(!vault_is_lapsed(&mut test, setup.vault));
+
+    // Release is refused inside the new window and succeeds at its end.
+    let (_stranger, stranger_proof, stranger_key) = test.create_funded_account();
+    test.execute_expect_failure(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof.clone()],
+    );
+    set_epoch(&mut test, INTERVAL * 6);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof],
+    );
+    assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::from(DEPOSIT));
+}
+
+// ---------------------------------------------------------------------------
+// Badge transfer: completing the old holder matrix
+// ---------------------------------------------------------------------------
+
+#[test]
+fn transferred_badge_old_holder_cannot_check_in() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let (_heir, _heir_proof, _heir_key) = transfer_badge(&mut test, &setup);
+
+    // The old holder cannot even complete the proof dance, exactly as with
+    // withdraw, set beneficiary and close.
+    test.execute_expect_failure(
+        test.transaction()
+            .create_proof(setup.owner, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "check_in", args![])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    let last_check_in: u64 = test.call_method(setup.vault, "last_check_in_epoch", args![], vec![]);
+    assert_eq!(last_check_in, 0);
+    assert_eq!(vault_deadline(&mut test, setup.vault), INTERVAL);
+}
+
+#[test]
+fn badge_passed_on_twice_only_the_final_holder_can_act() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let (heir, heir_proof, heir_key) = transfer_badge(&mut test, &setup);
+
+    // The first heir passes the badge on to a second heir.
+    let (final_holder, final_proof, final_key) = test.create_funded_account();
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(
+                heir,
+                "withdraw_non_fungible",
+                args![setup.badge_resource, tari_template_lib::types::NonFungibleId::from_u64(0)],
+            )
+            .put_last_instruction_output_on_workspace("badge")
+            .call_method(final_holder, "deposit", args![Workspace("badge")])
+            .build_and_seal(&heir_key),
+        vec![heir_proof.clone()],
+    );
+
+    // Neither the original owner nor the middle holder can check in now.
+    test.execute_expect_failure(
+        test.transaction()
+            .create_proof(setup.owner, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "check_in", args![])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    test.execute_expect_failure(
+        test.transaction()
+            .create_proof(heir, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "check_in", args![])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&heir_key),
+        vec![heir_proof.clone()],
+    );
+    let last_check_in: u64 = test.call_method(setup.vault, "last_check_in_epoch", args![], vec![]);
+    assert_eq!(last_check_in, 0);
+
+    // The final holder can.
+    set_epoch(&mut test, 4);
+    test.execute_expect_success(
+        test.transaction()
+            .create_proof(final_holder, setup.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(setup.vault, "check_in", args![])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&final_key),
+        vec![final_proof],
+    );
+    assert_eq!(vault_deadline(&mut test, setup.vault), 4 + INTERVAL);
+}
+
+// ---------------------------------------------------------------------------
+// Withdrawals in parts and in the lapsed window
+// ---------------------------------------------------------------------------
+
+#[test]
+fn withdraw_in_several_parts_accounts_to_the_unit() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // Four withdrawals that sum exactly to the deposit, the last of them a
+    // single unit. The vault balance is checked after every part.
+    let parts = [100_000u64, 150_000, 249_999, 1];
+    let mut remaining = DEPOSIT;
+    for part in parts {
+        owner_withdraw(&mut test, &setup, part);
+        remaining -= part;
+        assert_eq!(vault_balance(&mut test, setup.vault), Amount::from(remaining));
+    }
+
+    // Every unit came home: the owner is whole again, the vault is empty
+    // but still Active, and none of the withdrawals moved the deadline.
+    assert_eq!(
+        xtr_balance(&mut test, setup.owner),
+        Amount::from(FAUCET_BALANCE)
+    );
+    assert_eq!(vault_state(&mut test, setup.vault), "Active");
+    assert_eq!(vault_deadline(&mut test, setup.vault), INTERVAL);
+}
+
+#[test]
+fn owner_can_still_withdraw_after_the_lapse_until_release() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // The window lapses. Until somebody actually releases, the vault is
+    // still Active, so the owner badge still works in the lapsed window.
+    set_epoch(&mut test, INTERVAL + 3);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    owner_withdraw(&mut test, &setup, 200_000);
+    assert_eq!(
+        vault_balance(&mut test, setup.vault),
+        Amount::from(DEPOSIT - 200_000)
+    );
+    assert_eq!(vault_state(&mut test, setup.vault), "Active");
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    // The release then pays out only what is left.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    assert_eq!(
+        xtr_balance(&mut test, setup.beneficiary),
+        Amount::from(DEPOSIT - 200_000)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Beneficiary changes and exits around the lapse
+// ---------------------------------------------------------------------------
+
+#[test]
+fn changing_the_beneficiary_twice_pays_the_final_beneficiary() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let (second, _, _) = test.create_empty_account();
+    let (third, _, _) = test.create_empty_account();
+
+    // Two changes in a row: only the last one counts.
+    owner_set_beneficiary(&mut test, &setup, second);
+    owner_set_beneficiary(&mut test, &setup, third);
+    let beneficiary: ComponentAddress =
+        test.call_method(setup.vault, "beneficiary", args![], vec![]);
+    assert_eq!(beneficiary, third);
+
+    set_epoch(&mut test, INTERVAL);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+
+    assert_eq!(xtr_balance(&mut test, third), Amount::from(DEPOSIT));
+    assert_eq!(xtr_balance(&mut test, second), Amount::ZERO);
+    assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::ZERO);
+}
+
+#[test]
+fn owner_can_close_a_lapsed_vault_before_anyone_releases_it() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let owner_before = xtr_balance(&mut test, setup.owner);
+
+    // The window lapses, but closing only requires the vault to still be
+    // Active, so the owner can still take everything back first.
+    set_epoch(&mut test, INTERVAL + 2);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    owner_close(&mut test, &setup);
+    assert_eq!(vault_state(&mut test, setup.vault), "Closed");
+    assert_eq!(vault_balance(&mut test, setup.vault), Amount::ZERO);
+    assert_eq!(
+        xtr_balance(&mut test, setup.owner),
+        owner_before + Amount::from(DEPOSIT)
+    );
+
+    // And now release is impossible: the beneficiary gets nothing.
+    test.execute_expect_failure(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::ZERO);
+}
+
+#[test]
+fn release_long_after_the_deadline_still_pays_in_full() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // Ten whole windows pass before anyone touches the vault. There is no
+    // expiry on the release right itself.
+    set_epoch(&mut test, INTERVAL * 10);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    let (caller, caller_proof, caller_key) = test.create_funded_account();
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&caller_key),
+        vec![caller_proof],
+    );
+    assert_eq!(xtr_balance(&mut test, setup.beneficiary), Amount::from(DEPOSIT));
+    assert_eq!(vault_balance(&mut test, setup.vault), Amount::ZERO);
+    assert_eq!(vault_state(&mut test, setup.vault), "Released");
+}
+
+// ---------------------------------------------------------------------------
+// State and lapse views
+// ---------------------------------------------------------------------------
+
+#[test]
+fn state_reports_active_then_released_and_active_then_closed() {
+    let mut test = TemplateTest::my_crate();
+    let released = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let closed = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    assert_eq!(vault_state(&mut test, released.vault), "Active");
+    assert_eq!(vault_state(&mut test, closed.vault), "Active");
+
+    // The first vault runs its full course to release.
+    set_epoch(&mut test, INTERVAL);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(released.vault, "release", args![])
+            .build_and_seal(&released.owner_key),
+        vec![released.owner_proof.clone()],
+    );
+    assert_eq!(vault_state(&mut test, released.vault), "Released");
+    // The second vault is unaffected and still reports Active.
+    assert_eq!(vault_state(&mut test, closed.vault), "Active");
+
+    // The second vault is closed by its owner instead.
+    owner_close(&mut test, &closed);
+    assert_eq!(vault_state(&mut test, closed.vault), "Closed");
+}
+
+#[test]
+fn is_lapsed_turns_true_exactly_at_the_deadline_and_false_after_revival() {
+    let mut test = TemplateTest::my_crate();
+    let setup = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    assert!(!vault_is_lapsed(&mut test, setup.vault));
+    set_epoch(&mut test, INTERVAL - 1);
+    assert!(!vault_is_lapsed(&mut test, setup.vault));
+    // The flip happens exactly at the deadline epoch, not one after it.
+    set_epoch(&mut test, INTERVAL);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+
+    // A check in at the deadline revives the vault and the view flips back.
+    owner_check_in(&mut test, &setup);
+    assert!(!vault_is_lapsed(&mut test, setup.vault));
+    set_epoch(&mut test, INTERVAL * 2 - 1);
+    assert!(!vault_is_lapsed(&mut test, setup.vault));
+    set_epoch(&mut test, INTERVAL * 2);
+    assert!(vault_is_lapsed(&mut test, setup.vault));
+}
+
+// ---------------------------------------------------------------------------
+// Two vaults side by side
+// ---------------------------------------------------------------------------
+
+#[test]
+fn two_vaults_run_independently_side_by_side() {
+    let mut test = TemplateTest::my_crate();
+    let first = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let second = create_vault(&mut test, 300_000, INTERVAL * 3);
+
+    // At the first vault's deadline it has lapsed; the second has not.
+    set_epoch(&mut test, INTERVAL);
+    assert!(vault_is_lapsed(&mut test, first.vault));
+    assert!(!vault_is_lapsed(&mut test, second.vault));
+
+    // Releasing the first pays its beneficiary and leaves the second vault
+    // completely untouched.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(first.vault, "release", args![])
+            .build_and_seal(&first.owner_key),
+        vec![first.owner_proof.clone()],
+    );
+    assert_eq!(xtr_balance(&mut test, first.beneficiary), Amount::from(DEPOSIT));
+    assert_eq!(vault_state(&mut test, first.vault), "Released");
+    assert_eq!(vault_balance(&mut test, second.vault), Amount::from(300_000u64));
+    assert_eq!(vault_state(&mut test, second.vault), "Active");
+    assert_eq!(vault_deadline(&mut test, second.vault), INTERVAL * 3);
+    assert_eq!(xtr_balance(&mut test, second.beneficiary), Amount::ZERO);
+
+    // The second vault's own heartbeat still works on its own schedule.
+    set_epoch(&mut test, INTERVAL + 2);
+    owner_check_in(&mut test, &second);
+    assert_eq!(
+        vault_deadline(&mut test, second.vault),
+        INTERVAL + 2 + INTERVAL * 3
+    );
+    assert_eq!(vault_state(&mut test, first.vault), "Released");
+}
+
+#[test]
+fn one_vaults_badge_does_not_authorize_another_vault() {
+    let mut test = TemplateTest::my_crate();
+    let first = create_vault(&mut test, DEPOSIT, INTERVAL);
+    let second = create_vault(&mut test, DEPOSIT, INTERVAL);
+
+    // Each vault mints its own badge resource at creation.
+    assert_ne!(first.badge_resource, second.badge_resource);
+
+    // A proof of the first vault's badge does not satisfy the second
+    // vault's owner rule, neither for check in nor for withdraw.
+    test.execute_expect_failure(
+        test.transaction()
+            .create_proof(first.owner, first.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(second.vault, "check_in", args![])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&first.owner_key),
+        vec![first.owner_proof.clone()],
+    );
+    test.execute_expect_failure(
+        test.transaction()
+            .create_proof(first.owner, first.badge_resource)
+            .put_last_instruction_output_on_workspace("proof")
+            .authorize_proof("proof")
+            .call_method(second.vault, "withdraw", args![100u64])
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&first.owner_key),
+        vec![first.owner_proof.clone()],
+    );
+    let last_check_in: u64 = test.call_method(second.vault, "last_check_in_epoch", args![], vec![]);
+    assert_eq!(last_check_in, 0);
+    assert_eq!(vault_balance(&mut test, second.vault), Amount::from(DEPOSIT));
+
+    // The second vault's own badge works fine, so the refusals above were
+    // about the badge, not about the vault.
+    set_epoch(&mut test, 5);
+    owner_check_in(&mut test, &second);
+    assert_eq!(vault_deadline(&mut test, second.vault), 5 + INTERVAL);
+}
+
+// ---------------------------------------------------------------------------
+// Amount extremes
+// ---------------------------------------------------------------------------
+
+#[test]
+fn very_large_amounts_are_tracked_and_paid_exactly() {
+    let mut test = TemplateTest::my_crate();
+    // Nearly the entire faucet balance of the harness. Amounts in this
+    // engine are integers of micro Tari, so 999,999,999 units is 999.999999
+    // Tari, and every unit of it must be accounted for.
+    let setup = create_vault(&mut test, FAUCET_BALANCE - 1, INTERVAL);
+    assert_eq!(
+        vault_balance(&mut test, setup.vault),
+        Amount::from(FAUCET_BALANCE - 1)
+    );
+    assert_eq!(xtr_balance(&mut test, setup.owner), Amount::from(1u64));
+
+    // A single micro Tari top up from a stranger brings the vault to a
+    // round one thousand Tari in total.
+    let (stranger, stranger_proof, stranger_key) = test.create_funded_account();
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(stranger, "withdraw", args![TARI_TOKEN, 1u64])
+            .put_last_instruction_output_on_workspace("topup")
+            .call_method(setup.vault, "deposit", args![Workspace("topup")])
+            .build_and_seal(&stranger_key),
+        vec![stranger_proof],
+    );
+    assert_eq!(
+        vault_balance(&mut test, setup.vault),
+        Amount::from(FAUCET_BALANCE)
+    );
+
+    set_epoch(&mut test, INTERVAL);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    assert_eq!(
+        xtr_balance(&mut test, setup.beneficiary),
+        Amount::from(FAUCET_BALANCE)
+    );
+}
+
+#[test]
+fn fractional_amounts_down_to_one_micro_unit_are_paid_exactly() {
+    let mut test = TemplateTest::my_crate();
+    // Amounts are integers of micro Tari: one unit is 0.000001 Tari, the
+    // smallest fraction the chain can represent. This vault is built
+    // entirely from fractions of a single Tari.
+    let setup = create_vault(&mut test, 1, INTERVAL);
+    assert_eq!(vault_balance(&mut test, setup.vault), Amount::from(1u64));
+
+    // Top ups of 123,456 and 654,321 micro Tari (0.123456 and 0.654321
+    // Tari) bring the balance to 777,778 micro Tari.
+    for amount in [123_456u64, 654_321] {
+        test.execute_expect_success(
+            test.transaction()
+                .call_method(setup.owner, "withdraw", args![TARI_TOKEN, amount])
+                .put_last_instruction_output_on_workspace("topup")
+                .call_method(setup.vault, "deposit", args![Workspace("topup")])
+                .build_and_seal(&setup.owner_key),
+            vec![setup.owner_proof.clone()],
+        );
+    }
+    assert_eq!(vault_balance(&mut test, setup.vault), Amount::from(777_778u64));
+
+    // Withdrawing a single micro unit leaves exactly 777,777.
+    owner_withdraw(&mut test, &setup, 1);
+    assert_eq!(vault_balance(&mut test, setup.vault), Amount::from(777_777u64));
+
+    // And the release pays the beneficiary that exact fractional balance,
+    // not a rounded one.
+    set_epoch(&mut test, INTERVAL);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(setup.vault, "release", args![])
+            .build_and_seal(&setup.owner_key),
+        vec![setup.owner_proof.clone()],
+    );
+    assert_eq!(
+        xtr_balance(&mut test, setup.beneficiary),
+        Amount::from(777_777u64)
+    );
 }

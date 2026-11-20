@@ -53,7 +53,7 @@ which is what `Consensus::current_epoch()` reads inside the template.
 cargo test
 ```
 
-35 tests cover the full lifecycle: creation terms and guards, public top ups, check in extension,
+55 tests cover the full lifecycle: creation terms and guards, public top ups, check in extension,
 late check in revival, release before, exactly at and after the deadline, exact beneficiary payment
 with a third party caller, double release refusal, non owner refusal for every owner only method,
 badge transfer ownership including the old holder losing every owner only action and the new holder

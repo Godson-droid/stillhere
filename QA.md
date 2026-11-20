@@ -143,3 +143,20 @@ published binary is 147,558 bytes and is the exact build of the code in
 this repository. The known limitation above about the template not being
 deployed to a live network no longer applies to Esmeralda. Mainnet remains
 undeployed and the First to Launch bonus remains unattempted.
+
+## Update, 20 November 2026
+
+The engine suite now has 55 tests and the full suite passes, 55 passed and
+0 failed, run on 20 November 2026 against the code in this repository. The
+twenty added tests cover creation with a one epoch interval, refusal of a
+non fungible deposit and of a deposit in the wrong resource, proof that a
+deposit does not extend the deadline, a top up after the lapse increasing
+what the beneficiary receives, repeated check ins, revival after five
+silent intervals, the transferred badge old holder refused on check in, a
+badge passed on twice, several partial withdrawals accounting to the unit,
+withdrawal and closing inside the lapsed window before release, a second
+beneficiary change, release long after the deadline, the state and
+is_lapsed views at their exact boundaries, two vaults running side by side
+with no cross talk, one vault badge refused on another vault, and very
+large and single micro unit amounts tracked and paid exactly. No template
+code changed in this update, tests only.
