@@ -2,6 +2,7 @@
 
 Checked 2026-11-16 against the verified contest rules in `../RESEARCH.md`
 (Tari November Build Contest, theme "MVP", deadline 2026-12-01 00:00 UTC).
+Last updated 2026-11-27 (see the closing update at the end of this file).
 
 ## Contest rules vs deliverables
 
@@ -10,11 +11,10 @@ Checked 2026-11-16 against the verified contest rules in `../RESEARCH.md`
 | New code only, written after the 2026-11-01 theme announcement | PASS — repo created and written 2026-11-16; git history starts today |
 | OSI approved open source licence, MIT recommended | PASS — MIT `LICENSE`, Copyright 2026 Godson |
 | Rust / Ootle MVP build | PASS — `src/lib.rs`, one template, `tari_template_lib` 0.40.1 |
-| Working MVP app link for judges | READY — `sim/index.html`, a self contained simulation of the template logic (see below); hosting is a later step with Godson |
-| Public code link | PENDING GODSON — repo is local only in this phase; publishing to GitHub is a separate approved step |
-| Submission post in community.tari.com topic 520 (code link, app link, description, Tari payment address, announcement link) | PENDING GODSON — not part of this build phase; the payment address must come from his own Tari wallet |
-| Announcement on Bluesky, Reddit, Medium or YouTube (X does not count) | PENDING GODSON — his existing YouTube channel satisfies this with no new account |
-| AI / agent development | Allowed explicitly by the Council; nothing to do |
+| Working MVP app link for judges | PASS — simulation hosted and live at https://godson-droid.github.io/stillhere/sim/ |
+| Public code link | PASS — published at https://github.com/Godson-droid/stillhere (repo created 2026-11-19) |
+| Submission post in community.tari.com topic 520 (code link, app link, description, Tari payment address, announcement link) | PASS — submitted as post 30 in topic 520, rewritten in full on 2026-11-21 after Fox granted edit access in post 37, with code link, app link, description, Tari payment address and announcement link all in the post |
+| Announcement on Bluesky, Reddit, Medium or YouTube (X does not count) | PASS — YouTube announcement at https://www.youtube.com/watch?v=FG9eTxrUMZw |
 | Judging: theme adherence (MVP), innovation, code quality | Addressed by design: one focused product shaped template, an unoccupied category in the field (no dead man's switch among the 21 entries), full test coverage, documented safety properties |
 
 ## Build and test evidence
@@ -98,15 +98,19 @@ Checked 2026-11-16 against the verified contest rules in `../RESEARCH.md`
 
 ## Known limitations and open items
 
-- The template is tested in process only. It has not been deployed to a
-  live Tari network or wallet in this phase.
-- The optional mainnet "First to Launch" bonus was not attempted: it
-  requires burning real XTM, which needs Godson's explicit approval and
-  funds.
-- Submission steps still to come with Godson: publish the repo publicly,
-  host the simulation, create/provide his Tari payment address, record or
-  post the announcement (YouTube), and post in topic 520 before
-  2026-12-01 00:00 UTC.
+- The template is deployed and verified on both networks: Esmeralda on
+  19 November 2026 and mainnet on 21 November 2026 (template
+  template_207a50d20c6bac05cac441fa3560377e92ed493217fbac3147f72405c27b38bb,
+  publish transaction
+  7da7290cd8bb0f116c7ec53c70bd12d43e1a2566efe240375f26e295f343991d,
+  epoch 39124). The full lifecycle has also been run live on mainnet; see
+  the 27 November 2026 update at the end of this file.
+- The mainnet publish required burning 3 XTM on layer 1 and claiming it
+  on layer 2, approved by Godson on 2026-11-21.
+- All submission steps are complete: the repo is public, the simulation
+  is hosted, the Tari payment address is in the submission post, the
+  YouTube announcement is posted, and the submission itself is post 30
+  in topic 520. No open items remain in this section.
 
 ## Rename note — 2026-11-16
 
@@ -160,3 +164,49 @@ is_lapsed views at their exact boundaries, two vaults running side by side
 with no cross talk, one vault badge refused on another vault, and very
 large and single micro unit amounts tracked and paid exactly. No template
 code changed in this update, tests only.
+
+## Update, 27 November 2026
+
+This closing update overtakes two statements in the dated updates above:
+the 19 November update says mainnet remains undeployed and the
+20 November update was written before the publish. The template was in
+fact published to mainnet on 21 November 2026 (template
+template_207a50d20c6bac05cac441fa3560377e92ed493217fbac3147f72405c27b38bb,
+publish transaction
+7da7290cd8bb0f116c7ec53c70bd12d43e1a2566efe240375f26e295f343991d,
+committed in epoch 39124, verified on the mainnet indexer), and every
+submission step listed as still to come in the original QA pass is
+complete, as the rules table at the top of this file now records.
+
+On 27 November 2026 the full lifecycle was also run end to end on
+mainnet against that published template, funded from the publish change:
+
+- Split and account creation, transaction
+  04036af18381211c327a92dc4070c5b9316be4f77decb8ff9b8172aad47b6ab8
+  (epoch 39552). The creator account and a separate beneficiary account
+  were created in this transaction.
+- Vault A created, transaction
+  d12297f86edee0c76e76462353c4ac6a8a455a77bb2ee5e1050542cd4d5f42aa:
+  component
+  component_8c081ccb95d232efb59d02b5ab6f71491a0356adcc5a1299d298e65b4bf36866,
+  deposit 400,000 microT, beneficiary the separate beneficiary account,
+  check in interval 100 epochs, deadline epoch 39652.
+- Owner check in on vault A, transaction
+  493b83f282a2c8a17b47d3fd603e3b0db0de3369b6a8565ea3ec4f9600a0ea6e
+  (epoch 39552), with the still_here.check_in event emitted.
+- Vault B created, transaction
+  5e4fd5dd147a1f6488a74969e23aaa2a40b380a5b71f15393939ddf2f9fa4067:
+  component
+  component_963cc172a05b5f41ebbafea9a78ae364c163f1ba6e841a600a243f63ba4a77f1,
+  deposit 400,000 microT, check in interval 1 epoch, deadline epoch
+  39553. No check in was made.
+- Release of vault B after the lapse, transaction
+  a0b2592662db6668d849b387093fc614b274646558e42ca0457cfd1ace2dc840
+  (epoch 39553), called by the beneficiary account, not the vault
+  creator. The beneficiary balance moved from 90,000 microT to
+  486,326 microT: the full 400,000 microT vault balance received, minus
+  the 3,674 microT release fee, exact to the unit. Vault B now reads
+  state Released on the mainnet indexer and vault A reads Active.
+
+Every transaction above was verified on the mainnet indexer at
+indexer-a.ootle.tari.com after it committed.
